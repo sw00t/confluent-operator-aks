@@ -13,7 +13,7 @@ Login to Azure
 az login
 ```
 
-## Deploy AKS
+# Deploy an AKS cluster
 Check K8s version availability for the selected zone. Comparison table per region at the link below:
 
 https://azure.microsoft.com/en-us/global-infrastructure/services/?regions=us-east,us-west,us-west-2&products=all
@@ -21,7 +21,7 @@ https://azure.microsoft.com/en-us/global-infrastructure/services/?regions=us-eas
 az aks get-versions --location westus --output table
 ```
 
-# Export resource group and AKS cluster
+## Export resource group and AKS cluster
 ```
 export RG=swoo-rg
 ```
@@ -29,7 +29,7 @@ export RG=swoo-rg
 export CLUSTER=swooAKSdemo
 ```
 
-# Create AKS cluster
+## Create AKS cluster (~5min)
 /Users/swoo/.ssh/id_rsa and /Users/swoo/.ssh/id_rsa.pub generated
 ```
 az aks create \
@@ -48,18 +48,18 @@ If no keys are created/available, generate them by including this in the above c
 ```
 
 
-# Connect kubectl to AKS
+## Connect kubectl to AKS
 ```
 az aks get-credentials --resource-group $RG --name $CLUSTER
 ```
 
-# Verify
+## Verify
 ```
 kubectl cluster-info
 kubectl get no -owide
 ```
 
-# Get and Prep Confluent Operator
+# Get, Prep, and Deploy Confluent Platform
 Download & unpack Confluent Operator
 ```
 wget https://platform-ops-bin.s3-us-west-1.amazonaws.com/operator/confluent-operator-5.5.0.tar.gz
@@ -81,53 +81,59 @@ In new values file, update
 -region and zones
 -enable and configure load balancer for external access
 
-# Create namespace 'confluent', set to current context
+## Create namespace 'confluent', set to current context
 ```
 kubectl create ns confluent && kubectl config set-context --current --namespace confluent
 ```
 
-# Helm install for Operator, ZooKeeper, Kafka, and Control Center
+## Helm install for Operator, ZooKeeper, Kafka, and Control Center
 ```
 helm install operator $OPAKS/helm/confluent-operator \
   --values $MYVALUESFILE \
   --namespace confluent \
   --set operator.enabled=true
 ```
+sleep 10s
 ```
 helm install zookeeper $OPAKS/helm/confluent-operator \
  --values $MYVALUESFILE \
  --namespace confluent \
  --set zookeeper.enabled=true
 ```
+sleep 30s
 ```
 helm install kafka $OPAKS/helm/confluent-operator \
    --values $MYVALUESFILE \
    --namespace confluent \
    --set kafka.enabled=true
 ```
+sleep 30s
 ```
 helm install controlcenter $OPAKS/helm/confluent-operator \
   --values $MYVALUESFILE \
   --namespace confluent \
   --set controlcenter.enabled=true
 ```
+sleep 15s
 
-# Watch pods spin up for readiness (~17min)
+## Watch pods spin up until READY status is 1/1 for all pods (~17min)
 ```
 watch kubectl get po
 ```
 
-# In a new term window, expose Control Center
+## In a new term window, expose Control Center
 ```
 kubectl -n confluent port-forward controlcenter-0 12345:9021
 open http://localhost:12345 # admin/Developer1
 ```
 
-## Clean up
+# Clean up
 ```
 helm delete controlcenter && helm delete kafka && helm delete zookeeper && helm delete operator
 ```
 ```
 az aks delete --resource-group $RG --name $CLUSTER -y
 ```
+
+
 
