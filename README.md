@@ -1,6 +1,6 @@
 # Confluent Platform 5.5 Operator on AKS / Azure Kubernetes Service demo [WIP]
 
-Last updated: 9 July 2020
+Last updated: 15 July 2020
 
 ## Prerequisites
 Install Azure CLI. MacOS:
@@ -86,6 +86,11 @@ In new values file, update
 kubectl create ns confluent && kubectl config set-context --current --namespace confluent
 ```
 
+## Open a new term window, watch as pods in following steps spin up
+```
+watch kubectl get po
+```
+
 ## Helm install for Operator, ZooKeeper, Kafka, and Control Center
 ```
 helm install operator $OPAKS/helm/confluent-operator \
@@ -93,33 +98,30 @@ helm install operator $OPAKS/helm/confluent-operator \
   --namespace confluent \
   --set operator.enabled=true
 ```
-sleep 10s
+sleep 2m
 ```
 helm install zookeeper $OPAKS/helm/confluent-operator \
  --values $MYVALUESFILE \
  --namespace confluent \
  --set zookeeper.enabled=true
 ```
-sleep 30s
+sleep 2m
 ```
 helm install kafka $OPAKS/helm/confluent-operator \
    --values $MYVALUESFILE \
    --namespace confluent \
    --set kafka.enabled=true
 ```
-sleep 30s
+sleep 5m
 ```
 helm install controlcenter $OPAKS/helm/confluent-operator \
   --values $MYVALUESFILE \
   --namespace confluent \
   --set controlcenter.enabled=true
 ```
-sleep 15s
+sleep 2m
 
-## Watch pods spin up until READY status is 1/1 for all pods (~17min)
-```
-watch kubectl get po
-```
+READY status of 1/1 for all pods should total ~12min.
 
 ## In a new term window, expose Control Center
 ```
@@ -129,48 +131,61 @@ open http://localhost:12345 # admin/Developer1
 
 # Configure DNS
 
-Set the DNS zone
+## Set the DNS zone
 ```
 export DNSzone=swoodemo.dev
 ```
-
-Run, then scroll to 7. Client Access:, External:
-```
-kubectl -n confluent get kafka kafka  -oyaml
-```
-
-Get the kafka bootstrap LB external IP
-```
-kubectl get svc | grep kafka-bootstrap-lb
-```
-```
-export bootstrap=<IP>
-```
-
-Get the domain, and LB endpoint IPs
-```
-kubectl -n confluent get kafka kafka -oyaml | grep "    domain: "
-kubectl -n confluent describe svc kafka-0-lb | grep "LoadBalancer Ingress"
-kubectl -n confluent describe svc kafka-1-lb | grep "LoadBalancer Ingress"
-kubectl -n confluent describe svc kafka-2-lb | grep "LoadBalancer Ingress"
-```
-
-Create Azure DNS records for the domain
+## Create Azure DNS zone for the domain
 ```
 az network dns zone create -g $RG -n $DNSzone
 ```
 
-Create Azure DNS records for kafka
+## Get the kafka bootstrap LB external IP
 ```
-az network dns record-set a add-record -g $RG -z $DNSzone -n kafka -a <IP from above>
+kubectl get svc | grep kafka-bootstrap-lb
+export bootstrap=<above IP>
+```
+## Create Azure DNS Zone records for kafka
+```
+az network dns record-set a add-record -g $RG -z $DNSzone -n kafka -a $bootstrap
 ```
 
-Run the following to create Azure DNS records for broker endpoints
+## Get the LB endpoint IPs, then create Azure DNS records
 ```
+kubectl -n confluent describe svc kafka-0-lb | grep "LoadBalancer Ingress"
 az network dns record-set a add-record -g $RG -z $DNSzone -n b0 -a <IP from above>
+```
+```
+kubectl -n confluent describe svc kafka-1-lb | grep "LoadBalancer Ingress"
 az network dns record-set a add-record -g $RG -z $DNSzone -n b1 -a <IP from above>
+```
+```
+kubectl -n confluent describe svc kafka-2-lb | grep "LoadBalancer Ingress"
 az network dns record-set a add-record -g $RG -z $DNSzone -n b2 -a <IP from above>
 ```
+
+# Verify entries
+```
+az network dns record-set list --resource-group $RG --zone-name $DNSzone
+```
+
+
+## Test
+Update client properties file
+```
+echo $bootstrap
+```
+Update bootstrap.servers field in client-aks.properties
+```
+vi ~/0/sw00t/confluent-operator/azure/client-aks.properties
+```
+
+# Create topic [WIP]
+kafka-topics --bootstrap-server $bootstrap:9092 \
+  --command-config client-aks.properties \
+  --create --topic test \
+  --partitions 1 \
+  --replication-factor 1
 
 # <insert test stuff here>
 
@@ -180,13 +195,11 @@ az network dns record-set a add-record -g $RG -z $DNSzone -n b2 -a <IP from abov
 helm delete controlcenter && helm delete kafka && helm delete zookeeper && helm delete operator
 ```
 ```
-az dns delete --resource-group $RG --name $DNSzone
+az network dns zone delete --resource-group $RG --name $DNSzone -y
 ```
 ```
 az aks delete --resource-group $RG --name $CLUSTER -y
 ```
 ```
-az group delete --name $RG
+az group delete --name $RG -y
 ```
-
-
