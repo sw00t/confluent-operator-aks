@@ -127,13 +127,66 @@ kubectl -n confluent port-forward controlcenter-0 12345:9021
 open http://localhost:12345 # admin/Developer1
 ```
 
+# Configure DNS
+
+Set the DNS zone
+```
+export DNSzone=swoodemo.dev
+```
+
+Run, then scroll to 7. Client Access:, External:
+```
+kubectl -n confluent get kafka kafka  -oyaml
+```
+
+Get the kafka bootstrap LB external IP
+```
+kubectl get svc | grep kafka-bootstrap-lb
+```
+```
+export bootstrap=<IP>
+```
+
+Get the domain, and LB endpoint IPs
+```
+kubectl -n confluent get kafka kafka -oyaml | grep "    domain: "
+kubectl -n confluent describe svc kafka-0-lb | grep "LoadBalancer Ingress"
+kubectl -n confluent describe svc kafka-1-lb | grep "LoadBalancer Ingress"
+kubectl -n confluent describe svc kafka-2-lb | grep "LoadBalancer Ingress"
+```
+
+Create Azure DNS records for the domain
+```
+az network dns zone create -g $RG -n $DNSzone
+```
+
+Create Azure DNS records for kafka
+```
+az network dns record-set a add-record -g $RG -z $DNSzone -n kafka -a <IP from above>
+```
+
+Run the following to create Azure DNS records for broker endpoints
+```
+az network dns record-set a add-record -g $RG -z $DNSzone -n b0 -a <IP from above>
+az network dns record-set a add-record -g $RG -z $DNSzone -n b1 -a <IP from above>
+az network dns record-set a add-record -g $RG -z $DNSzone -n b2 -a <IP from above>
+```
+
+# <insert test stuff here>
+
+
 # Clean up
 ```
 helm delete controlcenter && helm delete kafka && helm delete zookeeper && helm delete operator
 ```
 ```
+az dns delete --resource-group $RG --name $DNSzone
+```
+```
 az aks delete --resource-group $RG --name $CLUSTER -y
 ```
-
+```
+az group delete --name $RG
+```
 
 
