@@ -42,7 +42,7 @@ az aks create \
   --ssh-key-value ~/.ssh/id_rsa.pub
 ```
 
-If no keys are created/available, generate them by including this in the above command:
+If no keys are created/available, generate them by replacing the '--ssh-key-value' line in the above command with the following:
 ```
 --generate-ssh-keys
 ```
@@ -258,6 +258,14 @@ Example:
 ```
 az aks upgrade --resource-group $RG --name $CLUSTER --kubernetes-version 1.18.4
 ```
+## Reconnect kubectl to AKS
+```
+az aks get-credentials --resource-group $RG --name $CLUSTER
+```
+## Verify
+```
+kubectl get no -owide
+```
 
 
 # Clean up
@@ -265,10 +273,14 @@ az aks upgrade --resource-group $RG --name $CLUSTER --kubernetes-version 1.18.4
 helm delete controlcenter && helm delete kafka && helm delete zookeeper && helm delete operator
 ```
 ```
-az network dns zone delete --resource-group $RG --name $DNSzone -y
+helm delete schemaRegistry && helm delete connectors && helm delete replicator && helm delete ksql
 ```
 ```
 az aks delete --resource-group $RG --name $CLUSTER -y
+```
+
+```
+az network dns zone delete --resource-group $RG --name $DNSzone -y
 ```
 ```
 az group delete --name $RG -y
