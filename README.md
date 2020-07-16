@@ -206,29 +206,40 @@ Update bootstrap.servers field in client-aks.properties
 vi ~/0/sw00t/confluent-operator/azure/client-aks.properties
 ```
 
-## Create topic [WIP]
+Create topic [WIP]
+```
 kafka-topics --bootstrap-server $bootstrap:9092 \
   --command-config client-aks.properties \
   --create --topic test \
   --partitions 1 \
   --replication-factor 1
+```
 
-## Produce to topic from within k8s pod [WIP]
-## Get info (including internal bootstrap server)
+Produce to topic from within k8s pod [WIP]
+Get info (including internal bootstrap server)
+```
   kubectl get kafka -n confluent -oyaml
-## ssh into a broker pod:
+```
+ssh into a broker pod:
+```
   kubectl -n confluent exec -it kafka-0 bash
-## create properties file in the pod:
+```
+create properties file in the pod:
+```
   cat << EOF > kafka.properties
   bootstrap.servers=kafka:9071
   sasl.jaas.config=org.apache.kafka.common.security.plain.PlainLoginModule required username="test" password="test123";
   sasl.mechanism=PLAIN
   security.protocol=SASL_PLAINTEXT
   EOF
-## query bootstrap server
+```
+
+query bootstrap server
+```
   kafka-broker-api-versions --command-config kafka.properties --bootstrap-server kafka:9071
   #exit the server
   exit
+````
 
 ## Validate external access
 ref: https://docs.confluent.io/current/installation/operator/co-deployment.html#external-access-validation
