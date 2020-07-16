@@ -1,6 +1,6 @@
 # Confluent Platform 5.5 Operator on AKS / Azure Kubernetes Service demo [WIP]
 
-Last updated: 15 July 2020
+Last updated: 16 July 2020
 
 ## Prerequisites
 Install Azure CLI. MacOS:
@@ -15,8 +15,8 @@ az login
 
 # Deploy an AKS cluster
 Check K8s version availability for the selected zone. Comparison table per region at the link below:
-
 https://azure.microsoft.com/en-us/global-infrastructure/services/?regions=us-east,us-west,us-west-2&products=all
+
 ```
 az aks get-versions --location westus --output table
 ```
@@ -86,7 +86,8 @@ In new values file, update
 kubectl create ns confluent && kubectl config set-context --current --namespace confluent
 ```
 
-## Open a new term window, watch as pods in following steps spin up
+## Open a new term window and run a Watch to observe pods spin up in following steps
+READY 1/1 status for all pods should total ~12min.
 ```
 watch kubectl get po
 ```
@@ -98,7 +99,7 @@ helm install operator $OPAKS/helm/confluent-operator \
   --namespace confluent \
   --set operator.enabled=true
 ```
-sleep 2m
+sleep 1m
 ```
 helm install zookeeper $OPAKS/helm/confluent-operator \
  --values $MYVALUESFILE \
@@ -121,7 +122,29 @@ helm install controlcenter $OPAKS/helm/confluent-operator \
 ```
 sleep 2m
 
-READY status of 1/1 for all pods should total ~12min.
+# Optional Helm installs
+Additional components can be installed, however will require scaling of AKS cluster resources. For example:
+```
+az aks scale --resource-group $RG --name $CLUSTER --node-count 5 --nodepool-name nodepool1
+```
+
+## Schema Registry
+```
+helm upgrade --install schemaregistry $OPAKS/helm/confluent-operator --values $MYVALUESFILE --namespace confluent --set schemaregistry.enabled=true
+```
+## Kafka Connect
+```
+helm upgrade --install connectors $OPAKS/helm/confluent-operator --values $MYVALUESFILE --namespace confluent --set connect.enabled=true
+```
+## Confluent Replicator
+```
+helm upgrade --install replicator $OPAKS/helm/confluent-operator --values $MYVALUESFILE --namespace confluent --set replicator.enabled=true
+```
+## ksqlDB
+```
+helm upgrade --install ksql $OPAKS/helm/confluent-operator --values $MYVALUESFILE --namespace confluent --set ksql.enabled=true
+```
+
 
 ## In a new term window, expose Control Center
 ```
@@ -170,7 +193,10 @@ az network dns record-set list --resource-group $RG --zone-name $DNSzone
 ```
 
 
-## Test
+# Test
+## Validate internal access
+Ref: https://docs.confluent.io/current/installation/operator/co-deployment.html#internal-access-validation
+
 Update client properties file
 ```
 echo $bootstrap
@@ -180,14 +206,47 @@ Update bootstrap.servers field in client-aks.properties
 vi ~/0/sw00t/confluent-operator/azure/client-aks.properties
 ```
 
-# Create topic [WIP]
+## Create topic [WIP]
 kafka-topics --bootstrap-server $bootstrap:9092 \
   --command-config client-aks.properties \
   --create --topic test \
   --partitions 1 \
   --replication-factor 1
 
-# <insert test stuff here>
+## Produce to topic from within k8s pod [WIP]
+## Get info (including internal bootstrap server)
+  kubectl get kafka -n confluent -oyaml
+## ssh into a broker pod:
+  kubectl -n confluent exec -it kafka-0 bash
+## create properties file in the pod:
+  cat << EOF > kafka.properties
+  bootstrap.servers=kafka:9071
+  sasl.jaas.config=org.apache.kafka.common.security.plain.PlainLoginModule required username="test" password="test123";
+  sasl.mechanism=PLAIN
+  security.protocol=SASL_PLAINTEXT
+  EOF
+## query bootstrap server
+  kafka-broker-api-versions --command-config kafka.properties --bootstrap-server kafka:9071
+  #exit the server
+  exit
+
+## Validate external access
+ref: https://docs.confluent.io/current/installation/operator/co-deployment.html#external-access-validation
+
+
+# <Optional> Upgrade AKS cluster version
+Check what versions are available to upgrade to:
+```
+az aks get-upgrades --resource-group $RG --name $CLUSTER --output table
+```
+Upgrade cluster version
+```
+az aks upgrade --resource-group $RG --name $CLUSTER --kubernetes-version <KUBERNETES_VERSION>
+```
+Example:
+```
+az aks upgrade --resource-group $RG --name $CLUSTER --kubernetes-version 1.18.4
+```
 
 
 # Clean up
