@@ -1,6 +1,6 @@
 # Confluent Platform 5.5 Operator on AKS / Azure Kubernetes Service demo [WIP]
 
-Last updated: 16 July 2020
+Last updated: 21 July 2020
 
 ## Prerequisites
 Install Azure CLI. MacOS:
@@ -31,6 +31,10 @@ export CLUSTER=swooAKSdemo
 
 ## Create AKS cluster (~5min)
 /Users/swoo/.ssh/id_rsa and /Users/swoo/.ssh/id_rsa.pub generated
+Note: for upgrades,
+CP 5.5 1.15.11 up to v1.17.7 [Supported range is 1.13.x to 1.17.x], and
+CP 5.4 up to v1.15.12
+
 ```
 az aks create \
   --resource-group $RG \
@@ -122,6 +126,12 @@ helm install controlcenter $OPAKS/helm/confluent-operator \
 ```
 sleep 2m
 
+## In a new term window, expose Control Center
+```
+kubectl -n confluent port-forward controlcenter-0 12345:9021
+open http://localhost:12345 # admin/Developer1
+```
+
 # Optional Helm installs
 Additional components can be installed, however will require scaling of AKS cluster resources. For example:
 ```
@@ -145,12 +155,6 @@ helm upgrade --install replicator $OPAKS/helm/confluent-operator --values $MYVAL
 helm upgrade --install ksql $OPAKS/helm/confluent-operator --values $MYVALUESFILE --namespace confluent --set ksql.enabled=true
 ```
 
-
-## In a new term window, expose Control Center
-```
-kubectl -n confluent port-forward controlcenter-0 12345:9021
-open http://localhost:12345 # admin/Developer1
-```
 
 # Configure DNS
 
@@ -244,6 +248,14 @@ query bootstrap server
 ## Validate external access
 ref: https://docs.confluent.io/current/installation/operator/co-deployment.html#external-access-validation
 
+```
+kubectl get kafka -n confluent -oyaml
+```
+
+```
+kafka-topics --bootstrap-server kafka.swoodemo.dev:9092 --command-config client-aks.properties --create --replication-factor 3 --partitions 1 --topic example
+```
+
 
 # <Optional> Upgrade AKS cluster version
 Check what versions are available to upgrade to:
@@ -266,6 +278,82 @@ az aks get-credentials --resource-group $RG --name $CLUSTER
 ```
 kubectl get no -owide
 ```
+
+# <Optional> Upgrade CP components from 5.5.0 to 5.5.1
+Set upgrade path
+```
+export OPAKSUPG=/Users/swoo/0/Confluent/Operator/helm
+```
+
+Delete old clusterrolebinding
+kubectl delete clusterrolebinding <namespace>-<operator-deployment-name>
+Example:
+kubectl get deploy
+`cc-operator`
+```
+kubectl delete clusterrolebinding confluent-cc-operator
+```
+
+Disable reconcile
+```
+$OPAKS/scripts/upgrade/disable_reconcile.sh confluent
+```
+
+Upgrade Operator
+```
+helm upgrade --install operator \
+$OPAKS/helm/confluent-operator \
+--values $MYVALUESFILE \
+--set operator.enabled=true \
+--namespace confluent
+```
+
+Update ZooKeeper version the global configuration values file to reflect --set zookeeper.image.tag=5.5.1.0
+Update ZooKeeper component image
+```
+helm upgrade --install zookeeper \
+$OPAKS/helm/confluent-operator \
+--values $MYVALUESFILE \
+--set zookeeper.enabled=true \
+--namespace confluent
+```
+Re-enable reconciliation for ZooKeeper component
+```
+$OPAKS/scripts/upgrade/enable_reconcile.sh confluent zookeeper
+```
+Observe ZooKeeper cluster roll
+
+Update Kafka version the global configuration values file to reflect --set kafka.image.tag=5.5.1.0
+Update Kafka component
+```
+helm upgrade --install kafka \
+$OPAKS/helm/confluent-operator \
+--values $MYVALUESFILE \
+--set kafka.enabled=true \
+--namespace confluent
+```
+Re-enable reconcile for Kafka component
+```
+$OPAKS/scripts/upgrade/enable_reconcile.sh confluent kafka
+```
+Observe Kafka cluster roll
+```
+watch kubectl get po
+```
+
+Update C3 component to reflect --set controlcenter.image.tag=5.5.1.0 
+```
+helm upgrade --install controlcenter \
+$OPAKS/helm/confluent-operator \
+--values $MYVALUESFILE \
+--set controlcenter.enabled=true \
+--namespace confluent
+```
+Re-enable reconcile for C3 component
+```
+$OPAKS/scripts/upgrade/enable_reconcile.sh confluent controlcenter
+```
+
 
 
 # Clean up
